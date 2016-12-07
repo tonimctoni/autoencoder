@@ -858,6 +858,31 @@ public:
                 (*this)[i][j]+=factor*a[i][j]*a[i][j];
     }
 
+    inline void add_as_rows(const Matrix<1,N>& rhs) noexcept
+    {
+        for(size_t i=0;i<M;i++)
+            for(size_t j=0;j<N;j++)
+                (*this)[i][j]+=rhs[0][j];
+    }
+
+    template<unsigned long L>
+    inline void add_all_rows(const Matrix<L,N>& rhs) noexcept
+    {
+        static_assert(M==1,"M is not 1");
+        for(size_t i=0;i<M;i++)
+            for(size_t j=0;j<N;j++)
+                (*this)[i][j]+=rhs[0][j];
+    }
+
+    // just use memcpy
+    // template<unsigned long oM, unsigned long oN>
+    // inline void set_reshaped(const Matrix<oM,oN> other_arr) noexcept
+    // {
+    //     static_assert(M*N==oM*oN, "M*N!=oM*oN");
+    //     for(size_t i=0;i<M;i++)
+    //         for(size_t j=0;j<N;j++)
+    // }
+
     // template<unsigned long L>//user should make sure that this!=&a and this!=&b
     // inline void add_at_dot_bt(const Matrix<L,M>& a, const Matrix<N,L>& b) noexcept
     // {
@@ -1006,23 +1031,74 @@ public:
     {
         return X;
     }
+};
 
-    // inline const Matrix<1,mat_size> get_noisy(double sigma_squared) const noexcept
-    // {
-    //     Matrix<1,mat_size> ret;
-    //     ret.set(X);
-    //     static std::random_device rd;
-    //     static std::mt19937 gen(rd());
-    //     static std::normal_distribution<double> dst(0,sigma_squared);
-    //     for(auto &row:ret)
-    //         for(auto &element:row)
-    //             {
-    //                 element+=dst(gen);
-    //                 if(element<0.0) element=0.0;
-    //                 if(element>1.0) element=1.0;
-    //             }
-    //     return ret;
-    // }
+template<unsigned long M, unsigned long N>
+class OneHots
+{
+private:
+    std::array<size_t,M> hot_index;
+    Matrix<M, N> X;
+public:
+    OneHots()noexcept: X(0.0)
+    {
+        hot_index.fill(0);
+    }
+
+    inline void set(size_t indexindex, size_t index)
+    {
+        assert(indexindex<M);
+        assert(index<N);
+        X[indexindex][hot_index[indexindex]]=0.0;
+        hot_index[indexindex]=index;
+        X[indexindex][hot_index[indexindex]]=1.0;
+    }
+
+    inline void reset() noexcept
+    {
+        for(size_t i=0;i<M;i++)
+            X[i][hot_index[i]]=0.0;
+    }
+
+    inline const Matrix<M,N>& get() const noexcept
+    {
+        return X;
+    }
+};
+
+template<unsigned long M, unsigned long N>
+class RandomOneHots
+{
+private:
+    std::array<size_t,M> hot_index;
+    Matrix<M, N> X;
+    std::mt19937 gen;
+    std::uniform_int_distribution<size_t> dst;
+
+    inline void set(size_t indexindex, size_t index)
+    {
+        X[indexindex][hot_index[indexindex]]=0.0;
+        hot_index[indexindex]=index;
+        X[indexindex][hot_index[indexindex]]=1.0;
+    }
+public:
+    RandomOneHots()noexcept: X(0.0), gen(std::random_device()()), dst(0,N-1)
+    {
+        hot_index.fill(0);
+        for(size_t i=0;i<M;i++)
+            set(i, dst(gen));
+    }
+
+    inline void set_random() noexcept
+    {
+        for(size_t i=0;i<M;i++)
+            set(i, dst(gen));
+    }
+
+    inline const Matrix<M,N>& get() const noexcept
+    {
+        return X;
+    }
 };
 
 #endif

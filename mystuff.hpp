@@ -7,6 +7,7 @@
 #include <fstream>
 #include <array>
 #include <vector>
+#include <chrono>
 
 //Exception to be thrown on assertion fails.
 class AssertionException : public std::exception
@@ -30,6 +31,9 @@ public:
         error.append("Assertion:  ");
         error.append(assertion);
         error.append("\n");
+        auto current_time=std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        error.append(std::ctime(&current_time));
+        error.append("\n");
     }
 
     AssertionException(const char *message, const char *file, const char *func, int line, const char* assertion)
@@ -50,6 +54,9 @@ public:
         error.append("\n");
         error.append("Assertion:  ");
         error.append(assertion);
+        error.append("\n");
+        auto current_time=std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+        error.append(std::ctime(&current_time));
         error.append("\n");
     }
 
@@ -178,4 +185,148 @@ std::vector<std::string> split_string(const std::string &str, const std::string 
 
     return ret;
 }
+
+static_assert(sizeof(char)==1, "sizeof(char)!=1");
+template<unsigned long height, unsigned long width>
+class Image: public std::array<std::array<std::array<unsigned char,3>,width>,height>
+{
+private:
+public:
+    void to_bmp_file(const char *filename) const
+    {
+        static constexpr size_t raw_bitmap_data_size=(width*3+(4-width*3%4)%4)*height;
+        static constexpr size_t header_size=54;
+        static constexpr size_t file_size=header_size+raw_bitmap_data_size;
+        static constexpr size_t pad_size=((4-width*3%4)%4);
+        const size_t thousand=1000;
+
+        std::array<char, 54> header_data;
+        header_data.fill(0);
+        header_data[ 0]=(char)66;
+        header_data[ 1]=(char)77;
+        header_data[ 2]=(char)((file_size>> 0)&0xFF);
+        header_data[ 3]=(char)((file_size>> 8)&0xFF);
+        header_data[ 4]=(char)((file_size>>16)&0xFF);
+        header_data[ 5]=(char)((file_size>>24)&0xFF);
+        // 4 reserved bytes
+        header_data[10]=(char)54;
+
+        //bmpinfoheader:[u8;40]
+        header_data[14]=(char)40;
+        // 3 more bytes for the length of this header (not needed here)
+        header_data[18]=(char)((width>> 0)&0xFF);
+        header_data[19]=(char)((width>> 8)&0xFF);
+        header_data[20]=(char)((width>>16)&0xFF);
+        header_data[21]=(char)((width>>24)&0xFF);
+        header_data[22]=(char)((height>> 0)&0xFF);
+        header_data[23]=(char)((height>> 8)&0xFF);
+        header_data[24]=(char)((height>>16)&0xFF);
+        header_data[25]=(char)((height>>24)&0xFF);
+        header_data[26]=(char)1;
+        header_data[28]=(char)24;
+        header_data[34]=(char)((raw_bitmap_data_size>> 0)&0xFF);
+        header_data[35]=(char)((raw_bitmap_data_size>> 8)&0xFF);
+        header_data[36]=(char)((raw_bitmap_data_size>>16)&0xFF);
+        header_data[37]=(char)((raw_bitmap_data_size>>24)&0xFF);
+        header_data[38]=(char)((thousand>> 0)&0xFF);
+        header_data[39]=(char)((thousand>> 8)&0xFF);
+        header_data[40]=(char)((thousand>>16)&0xFF);
+        header_data[41]=(char)((thousand>>24)&0xFF);
+        header_data[42]=(char)((thousand>> 0)&0xFF);
+        header_data[43]=(char)((thousand>> 8)&0xFF);
+        header_data[44]=(char)((thousand>>16)&0xFF);
+        header_data[45]=(char)((thousand>>24)&0xFF);
+
+
+        std::array<char, pad_size> pad;pad.fill(0);
+        std::ofstream out(filename,std::ios_base::trunc|std::ios::binary);
+        assert(out.good());
+        out.write(header_data.data(), header_data.size());
+        for(size_t i=(*this).size()-1;;i--)
+        {
+            for(const auto &pixel:(*this)[i])
+            {
+                out.write((const char *) pixel.data()+2, 1);
+                out.write((const char *) pixel.data()+1, 1);
+                out.write((const char *) pixel.data()+0, 1);
+            }
+            out.write(pad.data(), pad.size());
+            if(i==0) break;
+        }
+        out.close(); //redundant
+    }
+};
+
+template<unsigned long height, unsigned long width>
+class GrayscaleImage: public std::array<std::array<unsigned char,width>,height>
+{
+private:
+public:
+    void to_bmp_file(const char *filename) const
+    {
+        static constexpr size_t raw_bitmap_data_size=(width*3+(4-width*3%4)%4)*height;
+        static constexpr size_t header_size=54;
+        static constexpr size_t file_size=header_size+raw_bitmap_data_size;
+        static constexpr size_t pad_size=((4-width*3%4)%4);
+        const size_t thousand=1000;
+
+        std::array<char, 54> header_data;
+        header_data.fill(0);
+        header_data[ 0]=(char)66;
+        header_data[ 1]=(char)77;
+        header_data[ 2]=(char)((file_size>> 0)&0xFF);
+        header_data[ 3]=(char)((file_size>> 8)&0xFF);
+        header_data[ 4]=(char)((file_size>>16)&0xFF);
+        header_data[ 5]=(char)((file_size>>24)&0xFF);
+        // 4 reserved bytes
+        header_data[10]=(char)54;
+
+        //bmpinfoheader:[u8;40]
+        header_data[14]=(char)40;
+        // 3 more bytes for the length of this header (not needed here)
+        header_data[18]=(char)((width>> 0)&0xFF);
+        header_data[19]=(char)((width>> 8)&0xFF);
+        header_data[20]=(char)((width>>16)&0xFF);
+        header_data[21]=(char)((width>>24)&0xFF);
+        header_data[22]=(char)((height>> 0)&0xFF);
+        header_data[23]=(char)((height>> 8)&0xFF);
+        header_data[24]=(char)((height>>16)&0xFF);
+        header_data[25]=(char)((height>>24)&0xFF);
+        header_data[26]=(char)1;
+        header_data[28]=(char)24;
+        header_data[34]=(char)((raw_bitmap_data_size>> 0)&0xFF);
+        header_data[35]=(char)((raw_bitmap_data_size>> 8)&0xFF);
+        header_data[36]=(char)((raw_bitmap_data_size>>16)&0xFF);
+        header_data[37]=(char)((raw_bitmap_data_size>>24)&0xFF);
+        header_data[38]=(char)((thousand>> 0)&0xFF);
+        header_data[39]=(char)((thousand>> 8)&0xFF);
+        header_data[40]=(char)((thousand>>16)&0xFF);
+        header_data[41]=(char)((thousand>>24)&0xFF);
+        header_data[42]=(char)((thousand>> 0)&0xFF);
+        header_data[43]=(char)((thousand>> 8)&0xFF);
+        header_data[44]=(char)((thousand>>16)&0xFF);
+        header_data[45]=(char)((thousand>>24)&0xFF);
+
+
+        std::array<char, pad_size> pad;pad.fill(0);
+        std::ofstream out(filename,std::ios_base::trunc|std::ios::binary);
+        assert(out.good());
+        out.write(header_data.data(), header_data.size());
+        for(size_t i=(*this).size()-1;;i--)
+        {
+            for(const auto &p:(*this)[i])
+            {
+                std::array<char,3> pixel;
+                pixel.fill(p);
+                out.write(pixel.data(), pixel.size());
+                // out.write((const char *) &p, 1);
+                // out.write((const char *) &p, 1);
+                // out.write((const char *) &p, 1);
+            }
+            out.write(pad.data(), pad.size());
+            if(i==0) break;
+        }
+        out.close(); //redundant
+    }
+};
 #endif
