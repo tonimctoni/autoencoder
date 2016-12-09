@@ -2,6 +2,7 @@
 #include "mystuff.hpp"
 #include <random>
 #include <sys/resource.h>
+#include <tuple>
 using namespace std;
 
 template<unsigned long input_size, unsigned long hidden_size, unsigned long batch_size=1>
@@ -34,6 +35,14 @@ public:
         syn_rms.set(1.0);
         bias_hidden_rms.set(1.0);
         bias_out_rms.set(1.0);
+    }
+
+    template<unsigned long L>
+    void set_parameters(const AutoencoderLayer<input_size, hidden_size, L> &ael) noexcept
+    {
+        syn.set(ael.syn);
+        bias_hidden.set(ael.bias_hidden);
+        bias_out.set(ael.bias_out);
     }
 
     const Matrix<batch_size,hidden_size>& calc1(const Matrix<batch_size,input_size>& X) noexcept
@@ -142,33 +151,30 @@ union bytewise_int32_t
     std::array<int8_t, 4> bytewise_val;
 };
 
-//3 layers (0.01):
-//3x18
-//6m32s
-//5 layers (0.001) (0.01 diverges):
-//2x21
-//13m12s
-//5 layers with pre-training:
-//
-//
-//5 layers with pre-training, reset ms after:
-//
-//
-//5 layers with corrupted pre-training:
-//
-//
-//reset ms after pre-training?
-//train all layers in pre-training, not only half?
 int moin()
 {
     static constexpr size_t image_size=28*28;
     static constexpr size_t image_num=60000;
-    static constexpr size_t hidden_size=100;
+    static constexpr size_t hidden_size=40;
     static constexpr size_t batch_size=20;
-    static constexpr double learning_rate=.001;
-    static constexpr size_t num_iterations=20000/batch_size;
-    static constexpr size_t num_pre_iterations=4000/batch_size;
+    static constexpr double learning_rate=.005;
+    static constexpr size_t num_iterations=80000/batch_size;
+    static constexpr size_t num_pre_iterations=20000/batch_size;
     static constexpr size_t iterations_in_between_prints=1000;
+    static constexpr double corruption=.25;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<size_t> dst(0,image_num-1);
+    std::bernoulli_distribution bern_dst(1-corruption);
+
+    AutoencoderLayer<image_size, 512, batch_size> ael1;
+    AutoencoderLayer<512, 256, batch_size> ael2;
+    AutoencoderLayer<256, 128, batch_size> ael3;//to 32 after
+    AutoencoderLayer<128, hidden_size, batch_size> ael4;
+    // AutoencoderLayer<200, 100, batch_size> ael5;
+    // AutoencoderLayer<100, hidden_size, batch_size> ael6;
+
     std::vector<std::array<double,image_size>> images(image_num);
     // X.reserve(image_num);
     {
@@ -205,16 +211,6 @@ int moin()
         }
     }
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<size_t> dst(0,image_num-1);
-    // std::bernoulli_distribution bern_dst(.3);
-
-    AutoencoderLayer<image_size, 1600, batch_size> ael1;
-    AutoencoderLayer<1600, 800, batch_size> ael2;
-    AutoencoderLayer<800, 400, batch_size> ael3;
-    AutoencoderLayer<400, 200, batch_size> ael4;
-    AutoencoderLayer<200, hidden_size, batch_size> ael5;
     Matrix<batch_size,image_size> X;
     double error=0.0;
     auto set_X=[&X, &gen, &dst, &images]()
@@ -230,7 +226,7 @@ int moin()
     for(size_t iteration=0;iteration<num_pre_iterations;iteration++)
     {
         set_X();
-        ael1.calc1(X);
+        ael1.calc1_corrupted(X, gen, bern_dst);
         ael1.calc2(ael1.get_output1());
         error+=ael1.set_delta2(X);
         ael1.propagate_delta2(ael1.get_delta1());
@@ -244,7 +240,7 @@ int moin()
     for(size_t iteration=0;iteration<num_pre_iterations;iteration++)
     {
         set_X();
-        ael1.calc1(X);
+        ael1.calc1_corrupted(X, gen, bern_dst);
         ael2.calc1(ael1.get_output1());
         ael2.calc2(ael2.get_output1());
         error+=ael2.set_delta2(ael1.get_output1());
@@ -259,7 +255,7 @@ int moin()
     for(size_t iteration=0;iteration<num_pre_iterations;iteration++)
     {
         set_X();
-        ael1.calc1(X);
+        ael1.calc1_corrupted(X, gen, bern_dst);
         ael2.calc1(ael1.get_output1());
         ael3.calc1(ael2.get_output1());
         ael3.calc2(ael3.get_output1());
@@ -275,7 +271,7 @@ int moin()
     for(size_t iteration=0;iteration<num_pre_iterations;iteration++)
     {
         set_X();
-        ael1.calc1(X);
+        ael1.calc1_corrupted(X, gen, bern_dst);
         ael2.calc1(ael1.get_output1());
         ael3.calc1(ael2.get_output1());
         ael4.calc1(ael3.get_output1());
@@ -288,74 +284,154 @@ int moin()
         {print(error/iterations_in_between_prints);error=0.0;}
     }
 
-    print("pretrain5...");
-    for(size_t iteration=0;iteration<num_pre_iterations;iteration++)
+    // print("pretrain5...");
+    // for(size_t iteration=0;iteration<num_pre_iterations;iteration++)
+    // {
+    //     set_X();
+    //     ael1.calc1_corrupted(X, gen, bern_dst);
+    //     ael2.calc1(ael1.get_output1());
+    //     ael3.calc1(ael2.get_output1());
+    //     ael4.calc1(ael3.get_output1());
+    //     ael5.calc1(ael4.get_output1());
+    //     ael5.calc2(ael5.get_output1());
+    //     error+=ael5.set_delta2(ael4.get_output1());
+    //     ael5.propagate_delta2(ael5.get_delta1());
+    //     ael5.propagate_delta1();
+    //     ael5.learn(learning_rate, ael4.get_output1(), ael5.get_output1());
+    //     if((iteration+1)%(iterations_in_between_prints/batch_size)==0)
+    //     {print(error/iterations_in_between_prints);error=0.0;}
+    // }
+
+    // print("pretrain6...");
+    // for(size_t iteration=0;iteration<num_pre_iterations;iteration++)
+    // {
+    //     set_X();
+    //     ael1.calc1_corrupted(X, gen, bern_dst);
+    //     ael2.calc1(ael1.get_output1());
+    //     ael3.calc1(ael2.get_output1());
+    //     ael4.calc1(ael3.get_output1());
+    //     ael5.calc1(ael4.get_output1());
+    //     ael6.calc1(ael5.get_output1());
+    //     ael6.calc2(ael6.get_output1());
+    //     error+=ael6.set_delta2(ael5.get_output1());
+    //     ael6.propagate_delta2(ael6.get_delta1());
+    //     ael6.propagate_delta1();
+    //     ael6.learn(learning_rate, ael5.get_output1(), ael6.get_output1());
+    //     if((iteration+1)%(iterations_in_between_prints/batch_size)==0)
+    //     {print(error/iterations_in_between_prints);error=0.0;}
+    // }
+
+
+    auto calculate=[&X, &ael1, &ael2, &ael3, &ael4]()
     {
-        set_X();
         ael1.calc1(X);
         ael2.calc1(ael1.get_output1());
         ael3.calc1(ael2.get_output1());
         ael4.calc1(ael3.get_output1());
-        ael5.calc1(ael4.get_output1());
-        ael5.calc2(ael5.get_output1());
-        error+=ael5.set_delta2(ael4.get_output1());
-        ael5.propagate_delta2(ael5.get_delta1());
-        ael5.propagate_delta1();
-        ael5.learn(learning_rate, ael4.get_output1(), ael5.get_output1());
-        if((iteration+1)%(iterations_in_between_prints/batch_size)==0)
-        {print(error/iterations_in_between_prints);error=0.0;}
-    }
-
-
-    auto calculate=[&X, &ael1, &ael2, &ael3, &ael4, &ael5]()
-    {
-        ael1.calc1(X);
-        ael2.calc1(ael1.get_output1());
-        ael3.calc1(ael2.get_output1());
-        ael4.calc1(ael3.get_output1());
-        ael5.calc1(ael4.get_output1());
-        ael5.calc2(ael5.get_output1());
-        ael4.calc2(ael5.get_output2());
+        // ael5.calc1(ael4.get_output1());
+        // ael6.calc1(ael5.get_output1());
+        // ael6.calc2(ael6.get_output1());
+        // ael5.calc2(ael6.get_output2());
+        ael4.calc2(ael4.get_output1());
         ael3.calc2(ael4.get_output2());
         ael2.calc2(ael3.get_output2());
         ael1.calc2(ael2.get_output2());
     };
-    auto set_deltas=[&X, &ael1, &ael2, &ael3, &ael4, &ael5]()
+    auto set_deltas=[&X, &ael1, &ael2, &ael3, &ael4]()
     {
         double error=ael1.set_delta2(X);
         ael1.propagate_delta2(ael2.get_delta2());
         ael2.propagate_delta2(ael3.get_delta2());
         ael3.propagate_delta2(ael4.get_delta2());
-        ael4.propagate_delta2(ael5.get_delta2());
-        ael5.propagate_delta2(ael5.get_delta1());
-        ael5.propagate_delta1(ael4.get_delta1());
+        ael4.propagate_delta2(ael4.get_delta1());
+        // ael5.propagate_delta2(ael6.get_delta2());
+        // ael6.propagate_delta2(ael6.get_delta1());
+        // ael6.propagate_delta1(ael5.get_delta1());
+        // ael5.propagate_delta1(ael4.get_delta1());
         ael4.propagate_delta1(ael3.get_delta1());
         ael3.propagate_delta1(ael2.get_delta1());
         ael2.propagate_delta1(ael1.get_delta1());
         ael1.propagate_delta1();
         return error;
     };
-    auto learn=[&X, &ael1, &ael2, &ael3, &ael4, &ael5]()
+    auto learn=[&X, &ael1, &ael2, &ael3, &ael4]()
     {
         ael1.learn(learning_rate, X, ael2.get_output2());
         ael2.learn(learning_rate, ael1.get_output1(), ael3.get_output2());
         ael3.learn(learning_rate, ael2.get_output1(), ael4.get_output2());
-        ael4.learn(learning_rate, ael3.get_output1(), ael5.get_output2());
-        ael5.learn(learning_rate, ael4.get_output1(), ael5.get_output1());
+        ael4.learn(learning_rate, ael3.get_output1(), ael4.get_output1());
+        // ael5.learn(learning_rate, ael4.get_output1(), ael6.get_output2());
+        // ael6.learn(learning_rate, ael5.get_output1(), ael6.get_output1());
     };
+    ael1.reset_rms();
+    ael2.reset_rms();
+    ael3.reset_rms();
+    ael4.reset_rms();
+    // ael5.reset_rms();
+    // ael6.reset_rms();
     error=0.0;
     print("training...");
     for(size_t iteration=0;iteration<num_iterations;iteration++)
     {
         set_X();
 
-        calculate();
+        ael1.calc1_corrupted(X, gen, bern_dst);
+        ael2.calc1(ael1.get_output1());
+        ael3.calc1(ael2.get_output1());
+        ael4.calc1(ael3.get_output1());
+        ael4.calc2(ael4.get_output1());
+        ael3.calc2(ael4.get_output2());
+        ael2.calc2(ael3.get_output2());
+        ael1.calc2(ael2.get_output2());
+        // calculate();
         error+=set_deltas();
         learn();
 
         if((iteration+1)%(iterations_in_between_prints/batch_size)==0)
         {print(error/iterations_in_between_prints);error=0.0;}
     }
+    print("training... part 2...");
+    for(size_t iteration=0;iteration<num_iterations;iteration++)
+    {
+        // double nlr=learning_rate/(1.+(iteration*batch_size)/(4000.0));
+        double nlr=learning_rate*pow(0.9440608762859234, (iteration*batch_size/1000.));
+        // learning_rate=0.01*pow(0.8912509381337456, (iteration/1000));// gets divided by 10 every 20k steps
+        set_X();
+
+        ael1.calc1_corrupted(X, gen, bern_dst);
+        ael2.calc1(ael1.get_output1());
+        ael3.calc1(ael2.get_output1());
+        ael4.calc1(ael3.get_output1());
+        ael4.calc2(ael4.get_output1());
+        ael3.calc2(ael4.get_output2());
+        ael2.calc2(ael3.get_output2());
+        ael1.calc2(ael2.get_output2());
+        // calculate();
+        error+=set_deltas();
+        ael1.learn(nlr, X, ael2.get_output2());
+        ael2.learn(nlr, ael1.get_output1(), ael3.get_output2());
+        ael3.learn(nlr, ael2.get_output1(), ael4.get_output2());
+        ael4.learn(nlr, ael3.get_output1(), ael4.get_output1());
+
+        if((iteration+1)%(iterations_in_between_prints/batch_size)==0)
+        {print(error/iterations_in_between_prints);error=0.0;}
+    }
+
+    error=0.0;
+    print("calculating error...");
+    for(size_t iteration=0;iteration<4*iterations_in_between_prints/batch_size;iteration++)
+    {
+        set_X();
+        calculate();
+        error+=ael1.set_delta2(X);
+    }
+    print("Error:", error/(iterations_in_between_prints*4));
+    print("Iterations:", num_iterations);
+    print("Pre-iterations:", num_pre_iterations);
+    print("Batch size:", batch_size);
+    print("Corruption:", corruption);
+    print("Hidden size:", hidden_size);
+    // num_iterations, num_pre_iterations, batch_size, corruption, hidden_size
 
     GrayscaleImage<28*2+14+28*2,28*batch_size> img;
     for(auto &row:img)row.fill(0);
@@ -407,7 +483,71 @@ int moin()
             }
         }
     }
-    img.to_bmp_file("bmpfile.bmp");
+
+    {
+        char buffer[256];
+        sprintf(buffer, "bmpfile_%lu_iters_%lu_train_iters_%lu_batches_%lf_corr_%lu_btn.bmp", num_iterations, num_pre_iterations, batch_size, corruption, hidden_size);
+        img.to_bmp_file(buffer);
+    }
+
+    AutoencoderLayer<image_size, 512, 1> t_ael1;
+    AutoencoderLayer<512, 256, 1> t_ael2;
+    AutoencoderLayer<256, 128, 1> t_ael3;
+    AutoencoderLayer<128, hidden_size, 1> t_ael4;
+
+    std::vector<Matrix<1,image_size>> test_images(10000);
+    // Matrix<10000, image_size> test_images;
+    {
+        std::ifstream in("../mnist/t10k-images.idx3-ubyte", std::ios::binary);
+        assert(in.good());
+        bytewise_int32_t a;
+        in.read((char*)&a.bytewise_val[3], 1);
+        in.read((char*)&a.bytewise_val[2], 1);
+        in.read((char*)&a.bytewise_val[1], 1);
+        in.read((char*)&a.bytewise_val[0], 1);
+        assert(a.val==2051);
+        in.read((char*)&a.bytewise_val[3], 1);
+        in.read((char*)&a.bytewise_val[2], 1);
+        in.read((char*)&a.bytewise_val[1], 1);
+        in.read((char*)&a.bytewise_val[0], 1);
+        assert(a.val==(int32_t)test_images.size());
+        in.read((char*)&a.bytewise_val[3], 1);
+        in.read((char*)&a.bytewise_val[2], 1);
+        in.read((char*)&a.bytewise_val[1], 1);
+        in.read((char*)&a.bytewise_val[0], 1);
+        assert(a.val==28);
+        in.read((char*)&a.bytewise_val[3], 1);
+        in.read((char*)&a.bytewise_val[2], 1);
+        in.read((char*)&a.bytewise_val[1], 1);
+        in.read((char*)&a.bytewise_val[0], 1);
+        assert(a.val==28);
+
+        std::array<unsigned char,image_size> buffer;
+        for(size_t i=0;i<test_images.size();i++)
+        {
+            in.read((char*)buffer.data(), buffer.size());
+            for(size_t j=0;j<image_size;j++)test_images[i][0][j]=buffer[j]/255.;
+            assert(in.good());
+        }
+    }
+
+    {
+        ofstream out("test_code_matrices.tcm",std::ios_base::trunc|std::ios::binary);
+        assert(out.good());
+        //maybe use training images im k-means in the future too, and use only their labels to decide the clusters label
+        for(const auto &test_image:test_images)
+        {
+            t_ael1.calc1(test_image);
+            t_ael2.calc1(t_ael1.get_output1());
+            t_ael3.calc1(t_ael2.get_output1());
+            t_ael4.calc1(t_ael3.get_output1());
+            t_ael4.calc2(t_ael4.get_output1());
+            t_ael3.calc2(t_ael4.get_output2());
+            t_ael2.calc2(t_ael3.get_output2());
+            t_ael1.calc2(t_ael2.get_output2());
+            t_ael1.get_output2().to_bin_file(out);
+        }
+    }
 
     return 0;
 }
