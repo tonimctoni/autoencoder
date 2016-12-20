@@ -992,6 +992,19 @@ inline void update_weight_momentum(Matrix<M,N> &weights, Matrix<M,N> &momentums,
         }
 }
 
+template<unsigned long M, unsigned long N>
+inline double e_distance2(const Matrix<M,N> &a, const Matrix<M,N> &b)
+{
+    double distance=0.0;
+    for(size_t i=0;i<M;i++)
+        for(size_t j=0;j<N;j++)
+        {
+            auto diff=a[i][j]-b[i][j];
+            distance+=diff*diff;
+        }
+    return distance;
+}
+
 void test_matrix()
 {
     //Constructor

@@ -2,7 +2,6 @@
 #include "mystuff.hpp"
 #include <random>
 #include <sys/resource.h>
-#include <tuple>
 using namespace std;
 
 template<unsigned long input_size, unsigned long hidden_size, unsigned long batch_size=1>
@@ -155,7 +154,7 @@ int moin()
 {
     static constexpr size_t image_size=28*28;
     static constexpr size_t image_num=60000;
-    static constexpr size_t hidden_size=40;
+    static constexpr size_t hidden_size=4;
     static constexpr size_t batch_size=20;
     static constexpr double learning_rate=.005;
     static constexpr size_t num_iterations=80000/batch_size;
@@ -531,23 +530,23 @@ int moin()
         }
     }
 
-    {
-        ofstream out("test_code_matrices.tcm",std::ios_base::trunc|std::ios::binary);
-        assert(out.good());
-        //maybe use training images im k-means in the future too, and use only their labels to decide the clusters label
-        for(const auto &test_image:test_images)
-        {
-            t_ael1.calc1(test_image);
-            t_ael2.calc1(t_ael1.get_output1());
-            t_ael3.calc1(t_ael2.get_output1());
-            t_ael4.calc1(t_ael3.get_output1());
-            t_ael4.calc2(t_ael4.get_output1());
-            t_ael3.calc2(t_ael4.get_output2());
-            t_ael2.calc2(t_ael3.get_output2());
-            t_ael1.calc2(t_ael2.get_output2());
-            t_ael1.get_output2().to_bin_file(out);
-        }
-    }
+    // {
+    //     ofstream out("test_code_matrices.tcm",std::ios_base::trunc|std::ios::binary);
+    //     assert(out.good());
+    //     //maybe use training images im k-means in the future too, and use only their labels to decide the clusters label
+    //     for(const auto &test_image:test_images)
+    //     {
+    //         t_ael1.calc1(test_image);
+    //         t_ael2.calc1(t_ael1.get_output1());
+    //         t_ael3.calc1(t_ael2.get_output1());
+    //         t_ael4.calc1(t_ael3.get_output1());
+    //         // t_ael4.calc2(t_ael4.get_output1());
+    //         // t_ael3.calc2(t_ael4.get_output2());
+    //         // t_ael2.calc2(t_ael3.get_output2());
+    //         // t_ael1.calc2(t_ael2.get_output2());
+    //         t_ael4.get_output1().to_bin_file(out);
+    //     }
+    // }
 
     return 0;
 }
